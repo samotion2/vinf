@@ -2,79 +2,11 @@ import csv
 import re
 import os
 import multiprocessing
+import time
 
 FILE = 'file'
 INDEXES = 'indexes'
 INDEX_F_NAME = 'index.csv'
-
-# def get_tag(file, tag):
-#     reg = fr'<{tag}>.*?<\/{tag}>'
-#     result = re.findall(reg, file, re.DOTALL)
-#     return result
-
-# class Counter:
-#     def __init__(self, num, file_name) -> None:
-#         self.actual = 0
-#         self.perc = 0
-#         self.perc_tmp = 0
-#         self.num = num
-#         self.file_name = file_name
-#         print(f'done: {self.perc_tmp}/100%, {self.file_name}')
-    
-#     def print_progress(self):
-#         if (self.perc < round(self.actual / self.num * 100)):
-#             self.perc = round(self.actual / self.num * 100)
-#             if (self.perc_tmp + 20 <= self.perc):
-#                 self.perc_tmp = self.perc
-#                 print(f'done: {self.perc_tmp}/100%, {self.file_name}')
-
-# def chunky_old(file_name):
-#     print(f'processing: {file_name}')
-#     phones = []
-#     index = {FILE: file_name, INDEXES: []}
-#     counter = 0
-#     with open(file_name, 'r', encoding="utf8") as f:
-#             chunk = ''
-#             appender = 0
-#             for line in f:
-#                 if re.search(r'<page>', line):
-#                     appender = 1
-#                 if (appender == 1):
-#                     chunk += line
-#                 if re.search(r'<\/page>', line):
-#                     appender = 0
-#                     ph = process(chunk)
-#                     if (ph):
-#                         phones.append(ph)
-#                         index[INDEXES].append(counter)
-#                     counter += 1
-#                     chunk = ''
-#     print(f'finished: {file_name}')
-#     if index[INDEXES]:
-#         write_index_pages(index)
-#     return phones
-
-# def process_old(chunk):
-#     page = chunk
-#     # for page in pages:
-#     if re.search(r"\[\[Category:.{0,50}?smart.{0,50}?\]\]", page):
-#         # print('naslo')
-#         name, soc, released = None, None, None
-#         reg_name = r' name += .*?[\|\&\n]'
-#         reg_soc = r' soc += .*?[\(\&\]\|\#]'
-#         # reg_soc = r' soc += .*?\[\[.*?\]\]'
-#         reg_released = r' released += .*?[\}\&]'
-
-#         if re.search(reg_name, page):
-#             name = re.search(reg_name, page, re.DOTALL).group(0)
-#         if re.search(reg_soc, page):
-#             soc = re.search(reg_soc, page, re.DOTALL).group(0)
-#         if re.search(reg_released, page):
-#             released = re.search(reg_released, page, re.DOTALL).group(0)
-#         # print(name, soc, released)
-#         if (name and soc and released):
-#             return Phone(name=name,soc=soc, released=released)
-#             # print(soc)
 
 class Phone:
     def __init__(self, name='?', soc='?', released='?'):
@@ -114,21 +46,26 @@ def chunky_index(file_name):
     print(f'processing: {file_name}')
     index = {FILE: file_name, INDEXES: []}
     counter = 0
+    cc = 0
+    cc1 = 0
     with open(file_name, 'r', encoding="utf8") as f:
             chunk = ''
             appender = 0
             for line in f:
                 if re.search(r'<page>', line):
                     appender = 1
+                    cc1 = cc
                 if (appender == 1):
                     chunk += line
                 if re.search(r'<\/page>', line):
                     appender = 0
                     ph = process_index(chunk)
                     if (ph):
-                        index[INDEXES].append(counter)
+                        index[INDEXES].append(f'{cc1}-{cc}')
+                        # print(cc1)
                     counter += 1
                     chunk = ''
+                cc +=1 
     print(f'finished: {file_name}')
     if index[INDEXES]:
         write_index_pages(index)
@@ -164,32 +101,29 @@ def create_index():
 
 def chunky_get(record):
     file_name = record[FILE]
-    # print(file_name)
     indexes = record[INDEXES].strip('][').split(', ')
-
+    # print(file_name)
     # print(indexes)
     print(f'processing: {file_name}')
     phones = []
-    counter = 0
+
     with open(file_name, 'r', encoding="utf8") as f:
-            chunk = ''
-            appender = 0
-            for line in f:
-                if re.search(r'<page>', line):
-                    appender = 1
-                if (appender == 1):
-                    chunk += line
-                if re.search(r'<\/page>', line):
-                    appender = 0
-                    # print(counter, indexes)
-                    if str(counter) in indexes:
-                        # print(chunk)
-                        ph = process_get(chunk)
-                        if (ph):
-                            phones.append(ph)
+        chunk = ''
+        counter = 0
+        index = [int(x) for x in indexes[counter].replace('\'', '').split('-')]
+        for i, line in enumerate(f):
+            if i > index[0] and i < index[1]:
+                chunk += line.strip()+'\n'
+            elif i == index[1]:
+                # print(chunk)
+                # print(index[0], index[1])
+                ph = process_get(chunk)
+                if (ph):
+                    phones.append(ph)
+                chunk = ''
+                if counter < len(indexes)-1:
                     counter += 1
-                    chunk = ''
-    print(f'finished: {file_name}')
+                    index = [int(x) for x in indexes[counter].replace('\'', '').split('-')]
     return phones
 
 def process_get(page):
@@ -236,5 +170,13 @@ def get_phones():
             printed.append(p)
 
 if __name__ == '__main__':
-    # create_index()
+    start = time.time()
+    create_index()
+    end = time.time()
+    print('indexing: ', end - start)
+    
+    start = time.time()
     get_phones()
+    end = time.time()
+    print('parsing:', end - start)
+
