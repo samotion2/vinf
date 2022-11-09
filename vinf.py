@@ -3,10 +3,13 @@ import re
 import os
 import multiprocessing
 import time
+from difflib import get_close_matches
 
 FILE = 'file'
 INDEXES = 'indexes'
 INDEX_F_NAME = 'index.csv'
+SEARCHED_PHONE = 's5'
+DATA_DIR = 'C:\\Users\\uplny\\Desktop\\vinf\\vinfdata'
 
 class Phone:
     def __init__(self, name='?', soc='?', released='?'):
@@ -16,7 +19,7 @@ class Phone:
 
     def clean(self, word):
         cln = ['name', 'soc', 'released']
-        spec = ['Start date and age', 'start date and age', 'df=y']
+        spec = ['Start date and age', 'start date and age', 'df=y', 'ubl', ':']
         reg = r'[\|\[\]\;\&\(\)\{\}\n\#]'
         w = re.sub(reg, '', word)
         
@@ -28,11 +31,17 @@ class Phone:
             # print(i)
             w = re.sub(i, '', w)
         
+        w = re.sub(r'\'\'\'.*?\'\'\'', '', w)
+        w = w.strip()
         return w
     
     def year_clean(self, year):
         year = re.findall(r'\d+', year)
-        return f'{year[0]}.{year[1]}.{year[2]}'
+        if int(year[2]) < 10 and year[2][0] != '0':
+            year[2] = '0' + year[2]
+        if int(year[1]) < 10 and year[1][0] != '0':
+            year[1] = '0' + year[1]
+        return f'{year[2]}.{year[1]}.{year[0]}'
 
     def __str__(self) -> str:
         return f'name: {self.name}, soc: {self.soc}, released: {self.released}'
@@ -45,27 +54,24 @@ class Phone:
 def chunky_index(file_name):
     print(f'processing: {file_name}')
     index = {FILE: file_name, INDEXES: []}
-    counter = 0
-    cc = 0
-    cc1 = 0
+    actual_line = 0
+    start_line = 0
     with open(file_name, 'r', encoding="utf8") as f:
             chunk = ''
             appender = 0
             for line in f:
                 if re.search(r'<page>', line):
                     appender = 1
-                    cc1 = cc
+                    start_line = actual_line
                 if (appender == 1):
                     chunk += line
                 if re.search(r'<\/page>', line):
                     appender = 0
                     ph = process_index(chunk)
                     if (ph):
-                        index[INDEXES].append(f'{cc1}-{cc}')
-                        # print(cc1)
-                    counter += 1
+                        index[INDEXES].append(f'{start_line}-{actual_line}')
                     chunk = ''
-                cc +=1 
+                actual_line +=1 
     print(f'finished: {file_name}')
     if index[INDEXES]:
         write_index_pages(index)
@@ -88,11 +94,10 @@ def write_index_pages(index_dict):
 
 def create_index():
     write_index_header()
-    folder_dir = 'C:\\Users\\PC\\Desktop\\vinf\\vinfdata'
     files_names = []
-    for file in os.listdir(folder_dir):
+    for file in os.listdir(DATA_DIR):
         if file.endswith('.xml'):
-            files_names.append(os.path.join(folder_dir, file))
+            files_names.append(os.path.join(DATA_DIR, file))
     
     with multiprocessing.Pool() as pool:
         pool.map(chunky_index, files_names)
@@ -130,12 +135,15 @@ def process_get(page):
     # print(page)
     if re.search(r"\[\[Category:.{0,50}?smart.{0,50}?\]\]", page):
         name, soc, released = None, None, None
-        reg_name = r' name += .*?[\|\&\n]'
-        reg_soc = r' soc += .*?[\(\&\]\|\#]'
+        # reg_name = r' name += .*?[\|\&\n]'
+        reg_title = r'<title>(.*?)<\/title>'
+        # reg_soc = r' soc += .*?[\(\&\]\|\#]'
+        reg_soc = r' soc += .*?\[\[(.*?)\]\]'
         reg_released = r' released += .*?[\}\&]'
-
-        if re.search(reg_name, page):
-            name = re.search(reg_name, page, re.DOTALL).group(0)
+        # if re.search(reg_name, page):
+        #     print(re.search(reg_name, page, re.DOTALL).group(0))
+        if re.search(reg_title, page):
+            name = re.search(reg_title, page, re.DOTALL).group(1)
         if re.search(reg_soc, page):
             soc = re.search(reg_soc, page, re.DOTALL).group(0)
         if re.search(reg_released, page):
@@ -164,19 +172,29 @@ def get_phones():
         ph = [ent for sublist in ph for ent in sublist]
 
     printed = []
+    print('========List of all phones=========')
     for p in ph:
         if p not in printed:
             print(p)
             printed.append(p)
+    print('===================================')
+    # print([x.name for x in ph])
+    # SEARCHED_PHONE = input('Searched phone: ')
+    closest_match = get_close_matches(SEARCHED_PHONE, [x.name for x in printed], n=1, cutoff=0)[0]
+    for p in printed:
+        # print(p.name, closest_match)
+        if p.name == closest_match:
+            print(f'Searched phone: {SEARCHED_PHONE}')
+            print(p)
 
 if __name__ == '__main__':
     start = time.time()
     create_index()
     end = time.time()
-    print('indexing: ', end - start)
+    print('indexing duration: ', end - start)
     
     start = time.time()
     get_phones()
     end = time.time()
-    print('parsing:', end - start)
+    print('parsing duration:', end - start)
 
